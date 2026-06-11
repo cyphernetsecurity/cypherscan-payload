@@ -2,15 +2,31 @@
   "name": "cypherscan-payload",
   "version": "0.1.0",
   "description": "CypherScan upload security plugin for Payload CMS.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rimraf dist"
   },
-  "keywords": ["payload", "payloadcms", "cypherscan", "security", "upload", "malware-scanning"],
+  "keywords": [
+    "payload",
+    "payloadcms",
+    "cypherscan",
+    "security",
+    "upload",
+    "malware-scanning"
+  ],
   "author": "CypherNet Security",
   "license": "MIT",
   "peerDependencies": {
