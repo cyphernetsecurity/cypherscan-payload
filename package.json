@@ -1,6 +1,6 @@
 {
   "name": "cypherscan-payload",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "CypherScan upload security plugin for Payload CMS.",
   "type": "module",
   "main": "./dist/index.js",
