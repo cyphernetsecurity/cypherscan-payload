@@ -1,15 +1,48 @@
 import type { Config } from "payload";
 
+type CypherScanVerdict = "clean" | "suspicious" | "malicious" | "unknown";
+
+type CypherScanPluginResponse = {
+  ok?: boolean;
+  verdict?: CypherScanVerdict | string;
+  scanId?: string;
+  findings?: unknown[];
+  warnings?: string[];
+  error?: string;
+  code?: string;
+};
+
 export type CypherScanPayloadOptions = {
   apiKey: string;
   apiUrl?: string;
   collections?: string[];
+  blockVerdicts?: CypherScanVerdict[];
+  failOpen?: boolean;
 };
+
+function normalizeVerdict(value: unknown): CypherScanVerdict {
+  const verdict = String(value ?? "unknown").toLowerCase();
+
+  if (verdict === "clean") return "clean";
+  if (verdict === "suspicious") return "suspicious";
+  if (verdict === "malicious") return "malicious";
+
+  return "unknown";
+}
 
 export const cypherScanPayload =
   (options: CypherScanPayloadOptions) =>
   (config: Config): Config => {
-    const apiUrl = options.apiUrl ?? "https://cyphernetsecurity.com/api/scan";
+    const apiUrl =
+      options.apiUrl ??
+      "https://cyphernetsecurity.com/api/v1/plugin/payload/scan";
+
+    const blockVerdicts = options.blockVerdicts ?? [
+      "suspicious",
+      "malicious",
+    ];
+
+    const failOpen = options.failOpen ?? true;
 
     return {
       ...config,
@@ -30,50 +63,91 @@ export const cypherScanPayload =
             beforeChange: [
               ...(collection.hooks?.beforeChange ?? []),
               async ({ data, req, operation }) => {
-                req.payload.logger.info(
-                  `[cypherscan-payload] scan hook triggered for ${collection.slug} (${operation})`,
-                );
+                const file = (req as any).file;
 
-                if (!data) {
+                if (!file?.data) {
                   req.payload.logger.info(
-                    `[cypherscan-payload] no data received for ${collection.slug} (${operation})`,
+                    `[cypherscan-payload] no new upload file for ${collection.slug} (${operation})`,
                   );
 
                   return data;
                 }
 
-                const file = (req as any).file;
+                const fileName =
+                  file.name || data?.filename || "payload-upload.bin";
 
-                req.payload.logger.info("=== CYPHERSCAN DEBUG ===");
-                req.payload.logger.info(`collection: ${collection.slug}`);
-                req.payload.logger.info(`operation: ${operation}`);
-                req.payload.logger.info(`apiUrl: ${apiUrl}`);
-                req.payload.logger.info(`data: ${JSON.stringify(data)}`);
+                const mimeType =
+                  file.mimetype ||
+                  data?.mimeType ||
+                  "application/octet-stream";
+
                 req.payload.logger.info(
-                  `req keys: ${Object.keys(req).join(", ")}`,
+                  `[cypherscan-payload] scanning ${fileName} (${mimeType})`,
                 );
-                req.payload.logger.info(
-                  `req.file meta: ${JSON.stringify(
-                    file
-                      ? {
-                          name: file.name,
-                          mimetype: file.mimetype,
-                          size: file.size,
-                          md5: file.md5,
-                          tempFilePath: file.tempFilePath,
-                          hasData: Boolean(file.data),
-                          dataLength: file.data?.length,
-                        }
-                      : null,
-                  )}`,
-                );
-                req.payload.logger.info("========================");
 
-                // TODO: locate uploaded file in req.file / upload data
-                // TODO: send file to CypherScan API
-                // TODO: block upload if verdict is malicious
+                try {
+                  const formData = new FormData();
 
-                return data;
+                  const blob = new Blob([file.data], {
+                    type: mimeType,
+                  });
+
+                  formData.append("file", blob, fileName);
+                  formData.append("apiKey", options.apiKey);
+
+                  const response = await fetch(apiUrl, {
+                    method: "POST",
+                    headers: {
+                      "x-cypherscan-api-key": options.apiKey,
+                    },
+                    body: formData,
+                  });
+
+                  const result =
+                    (await response.json()) as CypherScanPluginResponse;
+
+                  if (!response.ok || result.ok === false) {
+                    const message =
+                      result.error ||
+                      result.code ||
+                      `CypherScan API returned HTTP ${response.status}`;
+
+                    throw new Error(message);
+                  }
+
+                  const verdict = normalizeVerdict(result.verdict);
+
+                  req.payload.logger.info(
+                    `[cypherscan-payload] verdict for ${fileName}: ${verdict}`,
+                  );
+
+                  if (blockVerdicts.includes(verdict)) {
+                    throw new Error(
+                      `Upload blocked by CypherScan. Verdict: ${verdict}`,
+                    );
+                  }
+
+                  return data;
+                } catch (error) {
+                  const message =
+                    error instanceof Error
+                      ? error.message
+                      : "Unknown CypherScan error";
+
+                  const isBlockingError = message.startsWith(
+                    "Upload blocked by CypherScan",
+                  );
+
+                  if (isBlockingError || !failOpen) {
+                    throw error;
+                  }
+
+                  req.payload.logger.warn(
+                    `[cypherscan-payload] scan failed; allowing upload because failOpen=true. Reason: ${message}`,
+                  );
+
+                  return data;
+                }
               },
             ],
           },
