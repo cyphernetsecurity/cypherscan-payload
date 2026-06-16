@@ -4,11 +4,23 @@ CypherScan upload security plugin for Payload CMS.
 
 Scan uploaded files before they are accepted by Payload and automatically block suspicious or malicious content.
 
+Learn more: https://cyphernetsecurity.com
+
 ## Installation
 
 ```bash
 npm install cypherscan-payload
 ```
+
+## API Key
+
+Create a CypherScan API key from:
+
+```text
+https://cyphernetsecurity.com/dashboard/api-keys
+```
+
+Then configure the plugin using your API key.
 
 ## Usage
 
@@ -64,6 +76,35 @@ cypherScanPayload({
 | suspicious | Upload blocked (default)                   |
 | malicious  | Upload blocked (default)                   |
 | unknown    | Upload allowed unless configured otherwise |
+
+## Example
+
+Upload:
+
+```text
+invoice.zip
+```
+
+Result:
+
+```text
+Verdict: suspicious
+Action: upload blocked
+```
+
+## Links
+
+Website:
+
+```text
+https://cyphernetsecurity.com
+```
+
+GitHub:
+
+```text
+https://github.com/cyphernetsecurity/cypherscan-payload
+```
 
 ## License
 
